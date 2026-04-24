@@ -6,7 +6,10 @@
 #define BUTTON_1 0 //D3
 bool shouldExit = false; // to exit the reasign
 
+int pinButtons[] = { BUTTON_1 }; // todo: add more buttons
+
 struct IrData { // It has the necessary data to send an IR signal
+  decode_type_t protocol;
   uint16_t address;
   uint8_t command;
 };
@@ -18,9 +21,9 @@ struct IrDataButton { // The struct that holds the IrData, and assigns the data 
 };
 
 IrData button1Signals[] = {
-  {0x820, 0x1C},
-  {0x820, 0x45},
-  {0x820, 0x45}
+  {NEC, 0x820, 0x1C},
+  {NEC, 0x820, 0x45},
+  {NEC, 0x820, 0x45}
 };
 
 IrDataButton buttons[] = {
@@ -42,15 +45,29 @@ void setup() {
 }
 
 void setIrSignals(){
-  // todo: if signal is unkown, do not set :)
   uint16_t address = IrReceiver.decodedIRData.address;
   uint8_t command = IrReceiver.decodedIRData.command;
-  IrReceiver.printIRResultShort(&Serial);
-  Serial.println(address);
-  Serial.println(command);
+  auto protocol = IrReceiver.decodedIRData.protocol;
+  if (protocol != UNKNOWN){
+    delay(50);
+    IrReceiver.printIRResultShort(&Serial);
+    Serial.println(address);
+    Serial.println(command);
+  }
 }
 
-void buttonListener(int pin){
+void sendIrSignals(IrData irData){
+  switch(irData.protocol){
+    case NEC:
+      IrSender.sendNEC(irData.address, irData.command, 0);
+      break;
+    case KASEIKYO_DENON:
+      IrSender.sendKaseikyo_Denon(irData.address, irData.command, 0);
+      break;
+  }
+}
+
+void buttonRegisterListener(int pin){
   if(digitalRead(pin) == LOW){ // to assign button pressed
   // todo: delete already existing button pin data if exists
     while(!shouldExit){
@@ -59,6 +76,20 @@ void buttonListener(int pin){
       } else {
         if(IrReceiver.decode()){
           setIrSignals(); // todo: Set an IrData to the IrDataButton
+          IrReceiver.resume();
+        }
+      }
+    }
+  }
+}
+
+void buttonSenderListener(int pin){
+  if (digitalRead(pin) == LOW){
+    for(IrDataButton button : buttons){
+      if(button.buttonPin == pin){
+        for(int i =0; i < button.length; i++){
+          sendIrSignals(button.data[i]);
+          delay(100); // todo: increase or decrease delay || maybe include a global delay var
         }
       }
     }
@@ -70,14 +101,18 @@ void loop() {
     shouldExit = false; // reasurring the shouldExit is false
     while(!shouldExit){
       // listens to all the buttons 
-      // todo: consider using a for structure for easier button adding 
-      buttonListener(BUTTON_1);
+      for(int pin : pinButtons){
+        buttonRegisterListener(pin);
+      } 
       if(digitalRead(SET_IRSIGNALS_PIN) == LOW){ // exit main loop when pressing the main button
         shouldExit = true;
         Serial.println("Exiting while on loop");
       }
     }
   }
+   for(int pin : pinButtons){
+    buttonSenderListener(pin);
+  } 
   // if (IrReceiver.decode()) {
   //   uint16_t address = IrReceiver.decodedIRData.address;
   //   uint8_t command = IrReceiver.decodedIRData.command;
@@ -90,7 +125,7 @@ void loop() {
   //   //   delay(500); // todo: consider lower cooldown
   //   // }
   //   IrReceiver.resume();   
-  }
+  //}
 }
 // Power Off A: 0x820, C:0x0
 // One: A:0x820, C:0x1C
