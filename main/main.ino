@@ -5,6 +5,7 @@
 #define IR_SENDER_PIN 4 //D2
 #define SET_IRSIGNALS_PIN 5 //D1
 #define BUTTON_1 0 //D3
+#define GLOBAL_DELAY 125
 bool shouldExit = false; // to exit the reassign
 
 int pinButtons[] = { BUTTON_1 }; // todo: add more buttons
@@ -59,7 +60,9 @@ void setIrSignals(int pin){
   if (protocol != UNKNOWN){
     delay(50);
     IrReceiver.printIRResultShort(&Serial);
+    Serial.print("Address: ");
     Serial.println(address);
+    Serial.print("Command: ");
     Serial.println(command);
     for(int i = 0; i < buttons.size(); i++){
       if(pin == buttons[i].buttonPin){
@@ -71,6 +74,11 @@ void setIrSignals(int pin){
 }
 
 void sendIrSignals(IrData irData){
+  Serial.println("Data: ---------");
+  Serial.print("Address: ");
+  Serial.println(irData.address);
+  Serial.print("Command: ");
+  Serial.println(irData.command);
   switch(irData.protocol){ // case on IrData protocol
     case NEC:
       IrSender.sendNEC(irData.address, irData.command, 0);
@@ -85,6 +93,7 @@ void deleteButtonData(int pin){
   for(int i = 0; i < buttons.size(); i++){
     if(pin == buttons[i].buttonPin){
       buttons[i].data.clear(); // access the button data, then clears
+      Serial.println("Data deleted");
       break;
     }
   }
@@ -92,9 +101,16 @@ void deleteButtonData(int pin){
 
 void buttonRegisterListener(int pin){
   if(digitalRead(pin) == LOW){ // to assign button pressed
+    delay(GLOBAL_DELAY);
+    Serial.print("Entering button listener of pin: ");
+    Serial.println(pin);
     deleteButtonData(pin);
     while(!shouldExit){
+      yield();
       if (digitalRead(SET_IRSIGNALS_PIN) == LOW) { // Exit if pressed the main button
+        Serial.print("Exiting button listener of pin: ");
+        Serial.println(pin);
+        delay(GLOBAL_DELAY);
         shouldExit = true;
       } else {
         if(IrReceiver.decode()){
@@ -108,32 +124,40 @@ void buttonRegisterListener(int pin){
 
 void buttonSenderListener(int pin){
   if (digitalRead(pin) == LOW){
+    Serial.print("Sending data from pin: ");
+    Serial.println(pin);
+    delay(GLOBAL_DELAY);
     for(IrDataButton &button : buttons){
       if(button.buttonPin == pin){
         for(int i =0; i < button.data.size(); i++){
           sendIrSignals(button.data[i]);
-          delay(100); // todo: increase or decrease delay || maybe include a global delay var
+          delay(GLOBAL_DELAY); // todo: increase or decrease delay || maybe include a global delay var
         }
       }
     }
+    Serial.println("Done sending data");
   }
 }
 
 void loop() {
   if (digitalRead(SET_IRSIGNALS_PIN) == LOW){ // If main button is pressed
+    delay(GLOBAL_DELAY);
     shouldExit = false; // reasurring the shouldExit is false
+    Serial.println("Entering while on loop");
     while(!shouldExit){
+      yield();
       // listens to all the buttons 
       for(int pin : pinButtons){
         buttonRegisterListener(pin);
       } 
       if(digitalRead(SET_IRSIGNALS_PIN) == LOW){ // exit main loop when pressing the main button
+        delay(GLOBAL_DELAY);
         shouldExit = true;
         Serial.println("Exiting while on loop");
       }
     }
   }
-   for(int pin : pinButtons){
+  for(int pin : pinButtons){
     buttonSenderListener(pin);
   }
 }
